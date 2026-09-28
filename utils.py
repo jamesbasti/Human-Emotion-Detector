@@ -40,28 +40,48 @@ def validate_image_file(uploaded_file) -> tuple[bool, str]:
     return True, ""
 
 
-def draw_detections(image: np.ndarray, people: list) -> np.ndarray:
+def draw_detections(image: np.ndarray, people: list, show_attributes: bool = False) -> np.ndarray:
     """
     Draw one bounding box + generalized-emotion label per detected person,
-    each in a distinct color, onto a copy of `image`.
+    each in a distinct color, onto a copy of `image`. If `show_attributes`
+    is True, the person's age group and gender are appended to the label.
+    Line/font sizes scale with the image so labels stay readable on big photos.
     """
     annotated = image.copy()
+    h, w = annotated.shape[:2]
+    s = max(1.0, max(h, w) / 900)
+    font_scale = 0.6 * s
+    box_thickness = max(2, int(3 * s))
+    text_thickness = max(1, int(2 * s))
 
     for i, person in enumerate(people):
         color = BOX_COLORS[i % len(BOX_COLORS)]
         box = person.box
-        cv2.rectangle(annotated, (box.x1, box.y1), (box.x2, box.y2), color, 3)
+        cv2.rectangle(annotated, (box.x1, box.y1), (box.x2, box.y2), color, box_thickness)
 
         label = f"Person {i + 1}: {person.generalized_emotion}"
-        (text_w, text_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        if show_attributes and (person.age or person.gender):
+            label += f" | {person.age}, {person.gender}"
+        (text_w, text_h), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness
+        )
 
-        label_y1 = max(0, box.y1 - text_h - baseline - 6)
-        cv2.rectangle(annotated, (box.x1, label_y1), (box.x1 + text_w + 8, box.y1), color, -1)
-
-        text_color = (255, 255, 255)
+        pad = int(4 * s)
+        label_y1 = max(0, box.y1 - text_h - baseline - 2 * pad)
+        label_y2 = label_y1 + text_h + baseline + 2 * pad
+        cv2.rectangle(annotated, (box.x1, label_y1), (box.x1 + text_w + 2 * pad, label_y2), color, -1)
         cv2.putText(
-            annotated, label, (box.x1 + 4, box.y1 - 6),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, text_color, 2, cv2.LINE_AA,
+            annotated, label, (box.x1 + pad, label_y2 - baseline - pad),
+            cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), text_thickness, cv2.LINE_AA,
         )
 
     return annotated
+
+
+def fit_for_display(image: np.ndarray, max_w: int = 700, max_h: int = 520) -> np.ndarray:
+    """Shrink (never enlarge) an image to fit inside max_w x max_h, keeping aspect ratio."""
+    h, w = image.shape[:2]
+    scale = min(max_w / w, max_h / h, 1.0)
+    if scale >= 1.0:
+        return image
+    return cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)

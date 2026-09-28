@@ -16,7 +16,7 @@ import streamlit as st
 from PIL import Image
 
 from inference import run_inference, InferenceError
-from utils import validate_image_file, draw_detections
+from utils import validate_image_file, draw_detections, fit_for_display
 from emotion_categories import EMOTIC_CATEGORIES, VAD_DIMENSIONS
 
 st.set_page_config(page_title="Emotion Detector", layout="wide")
@@ -26,6 +26,8 @@ st.set_page_config(page_title="Emotion Detector", layout="wide")
 # --------------------------------------------------------------------------
 if "show_breakdown" not in st.session_state:
     st.session_state.show_breakdown = False  # REQ-23: persists for the session
+if "show_attributes" not in st.session_state:
+    st.session_state.show_attributes = False
 
 # --------------------------------------------------------------------------
 # Header
@@ -56,6 +58,10 @@ with st.sidebar:
         "Show Emotion category breakdown",
         value=st.session_state.show_breakdown,
     )  # REQ-20
+    st.session_state.show_attributes = st.toggle(
+        "Show age and gender",
+        value=st.session_state.show_attributes,
+    )
 
 # --------------------------------------------------------------------------
 # Main content — the persistent Detection frame panel (3.5)
@@ -93,10 +99,17 @@ else:
             if len(people) == 0:
                 # REQ-8: no person detected
                 st.warning("No persons were found in this image.")
-                st.image(image_np, use_container_width=True)
+                st.image(fit_for_display(image_np))
             else:
-                annotated = draw_detections(image_np, people)
-                st.image(annotated, use_container_width=True)  # REQ-5/REQ-6/REQ-26
+                annotated = draw_detections(
+                    image_np, people, show_attributes=st.session_state.show_attributes
+                )
+                st.image(fit_for_display(annotated))  # REQ-5/REQ-6/REQ-26
+
+                if st.session_state.show_attributes:
+                    for i, person in enumerate(people):
+                        st.markdown(f"**Person {i + 1}:** {person.age}, {person.gender}")
+                    st.caption("Age and gender are model predictions and may be inaccurate.")
 
                 if st.session_state.show_breakdown:
                     # REQ-21: 26-category scores + VAD per person

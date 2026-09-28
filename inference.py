@@ -1,13 +1,13 @@
 """
-Inference pipeline: ONNX person detector (YOLO11n) -> ONNX emotion classifier.
+Inference pipeline: ONNX person detector (YOLO) -> ONNX emotion classifier.
 
 app.py and utils.py only use `run_inference()` and the `Person` / `BoundingBox`
 shapes below.
 
 Models (place in the `models/` folder next to this file):
-  - detector.onnx               YOLO11n, 1 class ("person"), 224x224 input,
-                                raw output [1, 5, 1029] = (cx, cy, w, h, score)
-  - emotic_attribute_model.onnx ResNet18, 224x224 person crop ->
+  - detector.onnx               YOLO26n, 1 class ("person"), 640x640 input,
+                                raw output [1, 5, 8400] = (cx, cy, w, h, score)
+  - emotic_attribute_model_1.onnx ResNet18, 224x224 person crop ->
                                 emotions (26 logits), continuous (VAD),
                                 age (3 logits), gender (2 logits)
 
@@ -32,10 +32,14 @@ from emotion_categories import EMOTIC_CATEGORIES, CATEGORY_TO_GROUP, VAD_DIMENSI
 # ------------------------------- CONFIG ------------------------------------
 MODELS_DIR = Path(__file__).parent / "models"
 DETECTOR_PATH = MODELS_DIR / "detector.onnx"
-CLASSIFIER_PATH = MODELS_DIR / "emotic_attribute_model.onnx"
+# First file that exists wins, so a re-trained model can just be dropped in.
+CLASSIFIER_CANDIDATES = [
+    MODELS_DIR / "emotic_attribute_model_1.onnx",
+    MODELS_DIR / "emotic_attribute_model.onnx",
+]
 
-DETECTOR_SIZE = 224          # detector input is fixed at 224x224
-CLASSIFIER_SIZE = 224        # classifier input is fixed at 224x224
+# Input sizes are read from the models themselves (see _input_size), so
+# re-exporting at a different resolution needs no code change.
 DETECTION_CONF = 0.25        # min person confidence to keep a box
 NMS_IOU = 0.45               # overlap threshold for non-max suppression
 
@@ -74,17 +78,22 @@ class InferenceError(Exception):
 
 @lru_cache(maxsize=1)
 def _load_sessions():
-    for p in (DETECTOR_PATH, CLASSIFIER_PATH):
-        if not p.exists():
-            raise InferenceError(
-                f"Model file not found: {p}. Put detector.onnx and "
-                f"emotic_attribute_model.onnx in the 'models' folder."
-            )
+    classifier_path = next((p for p in CLASSIFIER_CANDIDATES if p.exists()), None)
+    if not DETECTOR_PATH.exists() or classifier_path is None:
+        raise InferenceError(
+            "Model file(s) not found. Put detector.onnx and "
+            "emotic_attribute_model_1.onnx in the 'models' folder."
+        )
     providers = ["CPUExecutionProvider"]
     return (
         ort.InferenceSession(str(DETECTOR_PATH), providers=providers),
-        ort.InferenceSession(str(CLASSIFIER_PATH), providers=providers),
+        ort.InferenceSession(str(classifier_path), providers=providers),
     )
+
+
+def _input_size(session) -> int:
+    """Square input size (H = W) the model expects, e.g. 224 or 640."""
+    return int(session.get_inputs()[0].shape[2])
 
 
 def _sigmoid(x):
@@ -98,13 +107,14 @@ def _softmax(x):
 
 def _detect_people(session, image: np.ndarray) -> list[tuple[BoundingBox, float]]:
     """Letterbox -> YOLO forward -> decode -> NMS -> boxes in original pixels."""
+    size = _input_size(session)
     h, w = image.shape[:2]
-    scale = min(DETECTOR_SIZE / h, DETECTOR_SIZE / w)
+    scale = min(size / h, size / w)
     new_w, new_h = int(round(w * scale)), int(round(h * scale))
-    pad_x, pad_y = (DETECTOR_SIZE - new_w) // 2, (DETECTOR_SIZE - new_h) // 2
+    pad_x, pad_y = (size - new_w) // 2, (size - new_h) // 2
 
     resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-    canvas = np.full((DETECTOR_SIZE, DETECTOR_SIZE, 3), 114, dtype=np.uint8)
+    canvas = np.full((size, size, 3), 114, dtype=np.uint8)
     canvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = resized
 
     blob = canvas.astype(np.float32).transpose(2, 0, 1)[None] / 255.0
@@ -138,7 +148,8 @@ def _detect_people(session, image: np.ndarray) -> list[tuple[BoundingBox, float]
 
 def _classify_person(session, image: np.ndarray, box: BoundingBox) -> dict:
     crop = image[box.y1:box.y2, box.x1:box.x2]
-    crop = cv2.resize(crop, (CLASSIFIER_SIZE, CLASSIFIER_SIZE), interpolation=cv2.INTER_LINEAR)
+    size = _input_size(session)
+    crop = cv2.resize(crop, (size, size), interpolation=cv2.INTER_LINEAR)
     x = (crop.astype(np.float32) / 255.0 - NORM_MEAN) / NORM_STD
     x = x.transpose(2, 0, 1)[None].astype(np.float32)
 
