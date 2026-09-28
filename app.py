@@ -188,6 +188,18 @@ else:
                     # 26-category scores + VAD per person
                     st.divider()
                     st.markdown("### Emotion category breakdown")
+                    if people and people[0].calibrated:
+                        st.caption(
+                            "Scores are calibrated against each category's training "
+                            "frequency (calibration.json), so common categories like "
+                            "Engagement don't win by default. Ranking above uses "
+                            "calibrated scores; 'Raw' below is the uncalibrated model output."
+                        )
+                    else:
+                        st.caption(
+                            "No calibration.json found next to inference.py — showing raw, "
+                            "uncalibrated model output. See tools/compute_priors.py to generate one."
+                        )
                     for i, person in enumerate(people):
                         with st.expander(
                             f"Person {i + 1} — {person.generalized_emotion} "
@@ -198,16 +210,29 @@ else:
                             for col, dim in zip(vad_cols, VAD_DIMENSIONS):
                                 col.metric(dim, f"{person.vad[dim]:.1f} / 10")
 
-                            scores_df = (
-                                pd.DataFrame(
-                                    {
-                                        "Category": EMOTIC_CATEGORIES,
-                                        "Score": [person.category_scores[c] for c in EMOTIC_CATEGORIES],
-                                    }
+                            if person.calibrated:
+                                scores_df = (
+                                    pd.DataFrame(
+                                        {
+                                            "Category": EMOTIC_CATEGORIES,
+                                            "Calibrated": [person.calibrated_scores[c] for c in EMOTIC_CATEGORIES],
+                                            "Raw": [person.category_scores[c] for c in EMOTIC_CATEGORIES],
+                                        }
+                                    )
+                                    .sort_values("Calibrated", ascending=False)
+                                    .reset_index(drop=True)
                                 )
-                                .sort_values("Score", ascending=False)
-                                .reset_index(drop=True)
-                            )
+                            else:
+                                scores_df = (
+                                    pd.DataFrame(
+                                        {
+                                            "Category": EMOTIC_CATEGORIES,
+                                            "Score": [person.category_scores[c] for c in EMOTIC_CATEGORIES],
+                                        }
+                                    )
+                                    .sort_values("Score", ascending=False)
+                                    .reset_index(drop=True)
+                                )
                             st.dataframe(
                                 scores_df, width="stretch", hide_index=True, height=280
                             )

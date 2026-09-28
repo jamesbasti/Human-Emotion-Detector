@@ -14,6 +14,7 @@ Models (in the `models/` folder):
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -31,6 +32,14 @@ DETECTOR_PATH = MODELS_DIR / "detector.onnx"
 CLASSIFIER_CANDIDATES = [
     MODELS_DIR / "emotic_attribute_model.onnx",  
 ]
+# Per-category training prevalence, produced by tools/compute_priors.py from
+# the same training CSV the classifier was trained on. When present, scores
+# are calibrated against it (see _calibrate) before ranking, the same idea
+# as calibrated_generalized_scores() in the training notebook -- it stops
+# whatever category is most common in training (Engagement, here) from
+# winning by default regardless of what's actually in the image. When
+# absent, the app just uses raw sigmoid scores like it always has.
+CALIBRATION_PATH = Path(__file__).parent / "calibration.json"
 
 # Input sizes are read from the models themselves (see _input_size), so
 # re-exporting at a different resolution needs no code change.
@@ -47,6 +56,38 @@ AGE_CLASSES = ["Kid", "Teenager", "Adult"]
 GENDER_CLASSES = ["Female", "Male"]
 
 # }CONFIG
+
+
+@lru_cache(maxsize=1)
+def _load_calibration() -> dict | None:
+    """{category: training prevalence in (0,1)}, or None if no calibration.json."""
+    if not CALIBRATION_PATH.exists():
+        return None
+    priors = json.loads(CALIBRATION_PATH.read_text())
+    missing = [c for c in EMOTIC_CATEGORIES if c not in priors]
+    if missing:
+        raise InferenceError(f"calibration.json is missing categories: {missing}")
+    return priors
+
+
+def _calibrate(scores: dict) -> dict | None:
+    """
+    Log-odds calibration: subtract each category's training prevalence
+    (in log-odds space) from its raw sigmoid score, so a category that's
+    just generically common doesn't automatically rank first. Returns
+    None (meaning "not calibrated") if no calibration.json is present.
+    """
+    priors = _load_calibration()
+    if priors is None:
+        return None
+    eps = 1e-4
+    calibrated = {}
+    for c, p in scores.items():
+        p = min(max(p, eps), 1 - eps)
+        prior = priors[c]
+        evidence = np.log(p / (1 - p)) - np.log(prior / (1 - prior))
+        calibrated[c] = round(float(1 / (1 + np.exp(-evidence))), 4)
+    return calibrated
 
 
 @dataclass
@@ -68,6 +109,8 @@ class Person:
     gender: str = ""
     top_categories: list = field(default_factory=list)    # [(name, score)] top-K, best first
     raw_output: dict = field(default_factory=dict)         # untouched model outputs (for debugging)
+    calibrated: bool = False                                # True if calibration.json was applied
+    calibrated_scores: dict = field(default_factory=dict)   # category_scores after calibration (empty if not calibrated)
 
 
 class InferenceError(Exception):
@@ -191,7 +234,10 @@ def run_inference(image: np.ndarray) -> list[Person]:
         for box, conf, det_raw in detections:
             out = _classify_person(classifier, image, box)
             scores = {c: round(float(s), 4) for c, s in zip(EMOTIC_CATEGORIES, out["emotions"])}
-            ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+            calibrated_scores = _calibrate(scores)
+            # Rank by calibrated scores when available; category_scores stays
+            # the raw sigmoid output either way (shown in the raw-output view).
+            ranked = sorted((calibrated_scores or scores).items(), key=lambda kv: kv[1], reverse=True)
             top = ranked[0][0]
             people.append(Person(
                 box=box,
@@ -202,6 +248,8 @@ def run_inference(image: np.ndarray) -> list[Person]:
                 age=out["age"],
                 gender=out["gender"],
                 top_categories=ranked[:TOP_K],
+                calibrated=calibrated_scores is not None,
+                calibrated_scores=calibrated_scores or {},
                 raw_output={
                     "detector_row_cx_cy_w_h_score": det_raw,
                     **out["raw"],
