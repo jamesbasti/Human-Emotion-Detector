@@ -4,17 +4,12 @@ Inference pipeline: ONNX person detector (YOLO) -> ONNX emotion classifier.
 app.py and utils.py only use `run_inference()` and the `Person` / `BoundingBox`
 shapes below.
 
-Models (place in the `models/` folder next to this file):
+Models (in the `models/` folder):
   - detector.onnx               YOLO26n, 1 class ("person"), 640x640 input,
                                 raw output [1, 5, 8400] = (cx, cy, w, h, score)
   - emotic_attribute_model_1.onnx ResNet18, 224x224 person crop ->
                                 emotions (26 logits), continuous (VAD),
                                 age (3 logits), gender (2 logits)
-
-Things to CONFIRM with whoever trained the classifier (see CONFIG below):
-  1. Input normalization (assumed ImageNet mean/std on RGB in [0, 1]).
-  2. Order of the 26 emotion outputs (assumed EMOTIC's canonical order).
-  3. Age / gender class order (only used for the optional attributes).
 """
 
 from __future__ import annotations

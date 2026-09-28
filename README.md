@@ -39,6 +39,8 @@ it means this step wasn't run (or wasn't run inside the same Python that
 | `onnxruntime` | Runs the two `.onnx` models (detector + classifier) |
 | `imageio` | Writes the annotated output video |
 | `imageio-ffmpeg` | Bundles an ffmpeg binary so `imageio` can encode real H.264 — without this, output video won't play in the browser |
+| `streamlit-webrtc` *(optional)* | Enables live webcam video in Webcam mode |
+| `av` *(optional)* | FFmpeg bindings `streamlit-webrtc` needs to decode/encode the live video stream |
 
 If you want to install them one at a time instead of using
 `requirements.txt`:
@@ -71,12 +73,30 @@ py -m streamlit run app.py
   progress bar, then plays back the annotated result). Every 5th frame is
   run through the model and reused for frames in between, to keep CPU
   processing time reasonable — see SAMPLE_EVERY_N_FRAMES in video.py.
-- Webcam mode: working, but as a snapshot loop rather than a continuous
-  live feed — click "Take Photo" to capture and run detection on-demand.
-  True live streaming would need streamlit-webrtc, which pulls in aiortc
-  (a heavier, more failure-prone install on Windows); this was a deliberate
-  trade-off for reliability. Swap it in later if continuous streaming
-  becomes a hard requirement.
+- Webcam mode: live video when `streamlit-webrtc` + `av` are installed and
+  import successfully. If either isn't available for any reason, the app
+  automatically falls back to a snapshot loop ("Take Photo" -> see result ->
+  take another) using Streamlit's built-in camera widget instead — no
+  crash, no manual switch needed. See "If live webcam doesn't work" below.
+
+## If live webcam doesn't work
+
+`streamlit-webrtc` depends on `aiortc`, which needs a working `av` (FFmpeg
+bindings) install. This is the least predictable dependency in this
+project -- more likely than anything else here to fail to install, or to
+install but fail to connect (usually a firewall blocking the WebRTC
+connection). If that happens:
+
+- The app already handles the *unable to install* case for you: it
+  detects the missing import and silently uses the snapshot fallback
+  instead. You don't need to do anything.
+- If it installs but the video never connects (spinner that never loads,
+  or a permissions-looking error in the browser), just uninstall it --
+  `py -m pip uninstall streamlit-webrtc av` -- and rerun the app. It will
+  fall back automatically.
+- Camera permission is requested by the browser either way (live or
+  snapshot), so denying it produces the same "no camera access" behavior
+  in both modes.
 
 ## Files
 
@@ -85,5 +105,6 @@ py -m streamlit run app.py
 | `app.py` | Streamlit UI |
 | `inference.py` | Runs the ONNX detector + classifier on a single image/frame |
 | `video.py` | Video upload validation + full-video processing pipeline |
+| `webcam.py` | Live webcam video (optional) with automatic fallback detection |
 | `utils.py` | File validation and box drawing |
 | `emotion_categories.py` | EMOTIC categories and generalized groups |

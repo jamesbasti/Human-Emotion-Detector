@@ -13,6 +13,9 @@ from pathlib import Path
 from inference import run_inference, InferenceError
 from utils import validate_image_file, draw_detections, fit_for_display
 from video import validate_video_file, process_video
+from webcam import WEBRTC_AVAILABLE, process_frame
+if WEBRTC_AVAILABLE:
+    from webcam import render_live
 from emotion_categories import EMOTIC_CATEGORIES, VAD_DIMENSIONS
 
 st.set_page_config(page_title="Emotion Detector", layout="wide")
@@ -42,7 +45,14 @@ with st.sidebar:
     elif mode == "Video":
         uploaded_video = st.file_uploader("Upload a video (MP4)", type=["mp4"])  
     else:  # Webcam
-        webcam_photo = st.camera_input("Webcam")  # browser prompts for permission
+        if WEBRTC_AVAILABLE:
+            st.caption("Live webcam. Use the Start/Stop button below to release the camera.")
+        else:
+            st.caption(
+                "Live webcam isn't available (optional package not installed), "
+                "so this captures one photo at a time instead."
+            )
+            webcam_photo = st.camera_input("Webcam")  # browser prompts for permission
 
     st.divider()
     st.subheader("Detection Settings")
@@ -64,7 +74,7 @@ st.subheader("Detection frame")
 
 if mode == "Video":
     if uploaded_video is None:
-        st.markdown("*No input yet — upload a video from the sidebar to run detection.*")  
+        st.markdown("*upload a video from the sidebar to run detection.*")  
     else:
         is_valid, error_msg = validate_video_file(uploaded_video)
         if not is_valid:
@@ -97,13 +107,17 @@ if mode == "Video":
                 st.video(st.session_state["video_result"])  # native play/pause/scrub
 
 elif mode == "Webcam":
-    if webcam_photo is None:
-        st.markdown("*No input yet — allow camera access and take a photo.*")  
+    if WEBRTC_AVAILABLE:
+        # Live mode: detection runs inside the video callback (webcam.py);
+        # the component itself provides the Start/Stop control (REQ-19).
+        render_live(show_attributes=st.session_state.show_attributes)
+    elif webcam_photo is None:
+        st.markdown("*allow camera access and take a photo.*")
     else:
         image_np = np.array(Image.open(webcam_photo).convert("RGB"))
         with st.spinner("Running detection..."):
             try:
-                people = run_inference(image_np)  
+                people = run_inference(image_np)
             except InferenceError as e:
                 people = None
                 st.error(f"Detection failed: {e}")
@@ -117,7 +131,7 @@ elif mode == "Webcam":
                     image_np, people, show_attributes=st.session_state.show_attributes
                 )
                 st.image(fit_for_display(annotated))
-        st.caption("Take another photo above to run detection again, or switch modes to stop the camera.")  
+        st.caption("Take another photo above to run detection again, or switch modes to stop the camera.")
 
 elif uploaded_file is None:
     # placeholder state before first submitted input
