@@ -21,9 +21,8 @@ MAX_VIDEO_SECONDS = 60
 ALLOWED_VIDEO_EXTS = {"mp4"}
 
 # Run the (two-model) inference pipeline on 1 out of every N frames, and
-# reuse the last result on the frames in between. This is the "sampling
-# strategy for performance" REQ-12 asks for — full per-frame inference on
-# CPU is too slow to be usable on anything but very short clips.
+# reuse the last result on the frames in between. Full per-frame inference
+# on CPU is too slow to be usable on anything but very short clips.
 SAMPLE_EVERY_N_FRAMES = 5
 
 

@@ -25,27 +25,45 @@ From the project folder:
 py -m pip install -r requirements.txt
 ```
 
-This installs everything below. If you ever get a `ModuleNotFoundError`,
-it means this step wasn't run (or wasn't run inside the same Python that
-`streamlit run` uses) — rerun it.
+Every package this project needs is listed in `requirements.txt` — this
+one command installs all of them, including the optional live-webcam
+packages at the bottom of that file. It's the only install step most
+people need; the rest of this section is for when something goes wrong.
 
-| Package | Used for |
-|---|---|
-| `streamlit` | The web app framework — sidebar, image/video display, all UI |
-| `opencv-python-headless` | Resizing frames, drawing boxes/labels, letterboxing for the detector |
-| `numpy` | Array math for image data and model inputs/outputs |
-| `pandas` | The emotion-category breakdown and raw-output tables |
-| `pillow` | Reading uploaded images and webcam photos |
-| `onnxruntime` | Runs the two `.onnx` models (detector + classifier) |
-| `imageio` | Writes the annotated output video |
-| `imageio-ffmpeg` | Bundles an ffmpeg binary so `imageio` can encode real H.264 — without this, output video won't play in the browser |
-| `streamlit-webrtc` *(optional)* | Enables live webcam video in Webcam mode |
-| `av` *(optional)* | FFmpeg bindings `streamlit-webrtc` needs to decode/encode the live video stream |
-
-If you want to install them one at a time instead of using
-`requirements.txt`:
+**Verify it worked** before doing anything else:
 ```
-py -m pip install streamlit opencv-python-headless numpy pandas pillow onnxruntime imageio imageio-ffmpeg
+py -c "import streamlit, cv2, numpy, pandas, PIL, onnxruntime, imageio; print('core deps OK')"
+py -c "import streamlit_webrtc, av; print('webcam deps OK')"
+```
+The second line is allowed to fail — that just means live webcam won't be
+available and the app will use the snapshot fallback instead (see
+"Webcam mode" under Status, below). The first line failing means
+something in the main install didn't complete; scroll down to that
+package in the table and re-run its individual install command.
+
+If you ever see `ModuleNotFoundError: No module named 'x'` when running
+the app, it means the matching package below either wasn't installed, or
+was installed into a *different* Python than the one running
+`streamlit run` (common on Windows when both `python` and `py` are on
+your machine — stick to `py -m pip install` and `py -m streamlit run`
+throughout so both commands use the same Python).
+
+| Package | Used for | Install on its own |
+|---|---|---|
+| `streamlit` | The web app framework — sidebar, image/video display, all UI | `py -m pip install streamlit` |
+| `opencv-python-headless` | Resizing frames, drawing boxes/labels, letterboxing for the detector | `py -m pip install opencv-python-headless` |
+| `numpy` | Array math for image data and model inputs/outputs | `py -m pip install numpy` |
+| `pandas` | The emotion-category breakdown and raw-output tables | `py -m pip install pandas` |
+| `pillow` | Reading uploaded images and webcam photos | `py -m pip install pillow` |
+| `onnxruntime` | Runs the two `.onnx` models (detector + classifier). **Needs Python 3.11–3.13** — see step 1 | `py -m pip install onnxruntime` |
+| `imageio` | Writes the annotated output video | `py -m pip install imageio` |
+| `imageio-ffmpeg` | Bundles an ffmpeg binary so `imageio` can encode real H.264 — without this, output video won't play in the browser | `py -m pip install imageio-ffmpeg` |
+| `streamlit-webrtc` *(optional)* | Enables live webcam video in Webcam mode | `py -m pip install streamlit-webrtc` |
+| `av` *(optional)* | FFmpeg bindings `streamlit-webrtc` needs to decode/encode the live video stream. **Least reliable install in this project** — see "If live webcam doesn't work" below | `py -m pip install av` |
+
+All ten in one line, if you want it:
+```
+py -m pip install streamlit opencv-python-headless numpy pandas pillow onnxruntime imageio imageio-ffmpeg streamlit-webrtc av
 ```
 
 ### 3. Add the model files
