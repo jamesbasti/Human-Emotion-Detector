@@ -31,7 +31,9 @@ SAMPLE_EVERY_N_LIVE_FRAMES = 8
 
 try:
     import av
-    from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
+    from streamlit_webrtc import (
+        webrtc_streamer, VideoProcessorBase, RTCConfiguration, VideoHTMLAttributes,
+    )
     WEBRTC_AVAILABLE = True
 except ImportError:
     WEBRTC_AVAILABLE = False
@@ -82,7 +84,7 @@ if WEBRTC_AVAILABLE:
             annotated = process_frame(rgb, people, show_attributes)
             return av.VideoFrame.from_ndarray(annotated, format="rgb24")
 
-    def render_live(show_attributes: bool):
+    def render_live(show_attributes: bool, max_width: int = 700):
         """Render the live webrtc component. Call from app.py inside Webcam mode."""
         ctx = webrtc_streamer(
             key="emotion-webcam",
@@ -90,6 +92,13 @@ if WEBRTC_AVAILABLE:
             media_stream_constraints={"video": True, "audio": False},
             rtc_configuration=RTCConfiguration(
                 {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+            ),
+            # Caps the on-page video element's width so it can't overflow
+            # the layout on a big source resolution; height follows
+            # automatically since we don't set it, keeping the aspect ratio.
+            video_html_attrs=VideoHTMLAttributes(
+                style={"width": f"{max_width}px", "max-width": "100%"},
+                controls=False, autoPlay=True, muted=True,
             ),
         )
         if ctx.video_processor:

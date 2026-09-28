@@ -20,6 +20,12 @@ from emotion_categories import EMOTIC_CATEGORIES, VAD_DIMENSIONS
 
 st.set_page_config(page_title="Emotion Detector", layout="wide")
 
+# Max on-page width (px) for the detection frame — images, video playback,
+# and the live webcam feed all use this so nothing overflows the layout
+# on a large source photo/video/camera resolution. Matches utils.fit_for_display's
+# default so the sizing feels consistent across modes.
+DISPLAY_MAX_W = 700
+
 # Session state defaults
 if "show_breakdown" not in st.session_state:
     st.session_state.show_breakdown = False  # persists for the session
@@ -104,13 +110,13 @@ if mode == "Video":
                     st.session_state.pop("video_result", None)
 
             if st.session_state.get("video_result"):
-                st.video(st.session_state["video_result"])  # native play/pause/scrub
+                st.video(st.session_state["video_result"], width=DISPLAY_MAX_W)  # native play/pause/scrub
 
 elif mode == "Webcam":
     if WEBRTC_AVAILABLE:
         # Live mode: detection runs inside the video callback (webcam.py);
         # the component itself provides the Start/Stop control (REQ-19).
-        render_live(show_attributes=st.session_state.show_attributes)
+        render_live(show_attributes=st.session_state.show_attributes, max_width=DISPLAY_MAX_W)
     elif webcam_photo is None:
         st.markdown("*allow camera access and take a photo.*")
     else:
