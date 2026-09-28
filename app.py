@@ -21,9 +21,7 @@ from emotion_categories import EMOTIC_CATEGORIES, VAD_DIMENSIONS
 
 st.set_page_config(page_title="Emotion Detector", layout="wide")
 
-# --------------------------------------------------------------------------
 # Session state defaults
-# --------------------------------------------------------------------------
 if "show_breakdown" not in st.session_state:
     st.session_state.show_breakdown = False  # REQ-23: persists for the session
 if "show_attributes" not in st.session_state:
@@ -31,14 +29,10 @@ if "show_attributes" not in st.session_state:
 if "show_raw" not in st.session_state:
     st.session_state.show_raw = False
 
-# --------------------------------------------------------------------------
 # Header
-# --------------------------------------------------------------------------
 st.title("Emotion Detector")
 
-# --------------------------------------------------------------------------
 # Sidebar — mode selector + upload area + detection settings
-# --------------------------------------------------------------------------
 with st.sidebar:
     mode = st.radio("Input mode", ["Image", "Video", "Webcam"], horizontal=True)  # REQ-1/9/15
 
@@ -69,9 +63,7 @@ with st.sidebar:
         value=st.session_state.show_raw,
     )
 
-# --------------------------------------------------------------------------
 # Main content — the persistent Detection frame panel (3.5)
-# --------------------------------------------------------------------------
 st.subheader("Detection frame")
 
 if mode in ("Video", "Webcam"):

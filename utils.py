@@ -1,6 +1,5 @@
 """
 Helpers for validating uploads and drawing detection overlays.
-Kept separate from app.py so app.py stays readable as pure UI flow.
 """
 
 from __future__ import annotations
