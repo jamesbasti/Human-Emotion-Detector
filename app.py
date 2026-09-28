@@ -109,7 +109,6 @@ else:
                 if st.session_state.show_attributes:
                     for i, person in enumerate(people):
                         st.markdown(f"**Person {i + 1}:** {person.age}, {person.gender}")
-                    st.caption("Age and gender are model predictions and may be inaccurate.")
 
                 if st.session_state.show_breakdown:
                     # REQ-21: 26-category scores + VAD per person
