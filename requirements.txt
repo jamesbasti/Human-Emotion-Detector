@@ -4,3 +4,13 @@ numpy>=1.26
 pandas>=2.2
 pillow>=10.3
 onnxruntime>=1.20
+imageio>=2.34
+imageio-ffmpeg>=0.5
+
+# Optional: enables live webcam video (Webcam mode) instead of the
+# take-a-photo fallback. If these two fail to install, or the import
+# fails for any reason, the app detects that automatically and falls
+# back to the snapshot mode -- nothing else breaks. Safe to delete these
+# two lines and skip installing them if you'd rather not deal with it.
+streamlit-webrtc>=0.47
+av>=11.0
