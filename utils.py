@@ -42,9 +42,10 @@ def validate_image_file(uploaded_file) -> tuple[bool, str]:
 
 def draw_detections(image: np.ndarray, people: list, show_attributes: bool = False) -> np.ndarray:
     """
-    Draw one bounding box + generalized-emotion label per detected person,
-    each in a distinct color, onto a copy of `image`. If `show_attributes`
-    is True, the person's age group and gender are appended to the label.
+    Draw one bounding box + a label listing the top-K emotion categories (with
+    scores) per detected person, each in a distinct color, onto a copy of
+    `image`. If `show_attributes` is True, age group and gender are added to
+    the label header.
     Line/font sizes scale with the image so labels stay readable on big photos.
     """
     annotated = image.copy()
@@ -59,21 +60,32 @@ def draw_detections(image: np.ndarray, people: list, show_attributes: bool = Fal
         box = person.box
         cv2.rectangle(annotated, (box.x1, box.y1), (box.x2, box.y2), color, box_thickness)
 
-        label = f"Person {i + 1}: {person.generalized_emotion}"
+        # Multi-line label: header + top-K categories with their scores.
+        header = f"Person {i + 1}"
         if show_attributes and (person.age or person.gender):
-            label += f" | {person.age}, {person.gender}"
-        (text_w, text_h), baseline = cv2.getTextSize(
-            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness
-        )
+            header += f" | {person.age}, {person.gender}"
+        lines = [header] + [f"{name} {score:.0%}" for name, score in person.top_categories]
 
         pad = int(4 * s)
-        label_y1 = max(0, box.y1 - text_h - baseline - 2 * pad)
-        label_y2 = label_y1 + text_h + baseline + 2 * pad
-        cv2.rectangle(annotated, (box.x1, label_y1), (box.x1 + text_w + 2 * pad, label_y2), color, -1)
-        cv2.putText(
-            annotated, label, (box.x1 + pad, label_y2 - baseline - pad),
-            cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), text_thickness, cv2.LINE_AA,
-        )
+        sizes = [cv2.getTextSize(t, cv2.FONT_HERSHEY_SIMPLEX, font_scale, text_thickness) for t in lines]
+        line_h = max(th + bl for (_, th), bl in sizes) + pad
+        box_w = max(tw for (tw, _), _ in sizes) + 2 * pad
+        box_h = line_h * len(lines) + pad
+
+        # Put the label above the box; if there's no room, tuck it inside the top edge.
+        label_y1 = box.y1 - box_h
+        if label_y1 < 0:
+            label_y1 = box.y1
+        label_x1 = min(box.x1, max(0, w - box_w))
+        cv2.rectangle(annotated, (label_x1, label_y1), (label_x1 + box_w, label_y1 + box_h), color, -1)
+
+        for j, text in enumerate(lines):
+            (_, th), bl = sizes[j]
+            ty = label_y1 + pad + j * line_h + th
+            cv2.putText(
+                annotated, text, (label_x1 + pad, ty),
+                cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), text_thickness, cv2.LINE_AA,
+            )
 
     return annotated
 

@@ -28,6 +28,8 @@ if "show_breakdown" not in st.session_state:
     st.session_state.show_breakdown = False  # REQ-23: persists for the session
 if "show_attributes" not in st.session_state:
     st.session_state.show_attributes = False
+if "show_raw" not in st.session_state:
+    st.session_state.show_raw = False
 
 # --------------------------------------------------------------------------
 # Header
@@ -61,6 +63,10 @@ with st.sidebar:
     st.session_state.show_attributes = st.toggle(
         "Show age and gender",
         value=st.session_state.show_attributes,
+    )
+    st.session_state.show_raw = st.toggle(
+        "Show raw model output",
+        value=st.session_state.show_raw,
     )
 
 # --------------------------------------------------------------------------
@@ -106,10 +112,16 @@ else:
                 )
                 st.image(fit_for_display(annotated))  # REQ-5/REQ-6/REQ-26
 
+                # Top-3 emotion categories per person (also drawn on the image)
+                st.markdown("### Top 3 emotions")
+                for i, person in enumerate(people):
+                    top3 = " , ".join(f"{name} ({score:.0%})" for name, score in person.top_categories)
+                    st.markdown(f"**Person {i + 1}:** {top3}")
+
                 if st.session_state.show_attributes:
                     for i, person in enumerate(people):
                         st.markdown(f"**Person {i + 1}:** {person.age}, {person.gender}")
-
+                    
                 if st.session_state.show_breakdown:
                     # REQ-21: 26-category scores + VAD per person
                     st.divider()
@@ -137,3 +149,50 @@ else:
                             st.dataframe(
                                 scores_df, use_container_width=True, hide_index=True, height=280
                             )
+
+                if st.session_state.show_raw:
+                    st.divider()
+                    st.markdown("### Raw model output")
+                    st.caption(
+                        "Values straight from the networks, before sigmoid / softmax / clipping. "
+                        "Emotion logits become probabilities via sigmoid; age and gender logits via softmax."
+                    )
+                    for i, person in enumerate(people):
+                        raw = person.raw_output
+                        with st.expander(f"Person {i + 1} — raw output", expanded=(len(people) == 1)):
+                            cx, cy, bw, bh, score = raw["detector_row_cx_cy_w_h_score"]
+                            st.markdown("**Detector (YOLO) row** — 640×640 letterbox space")
+                            st.dataframe(
+                                pd.DataFrame([{"cx": cx, "cy": cy, "w": bw, "h": bh, "score": score}]),
+                                use_container_width=True, hide_index=True,
+                            )
+
+                            st.markdown("**Classifier: 26 emotion logits** (canonical EMOTIC order)")
+                            logit_df = pd.DataFrame(
+                                {
+                                    "Category": EMOTIC_CATEGORIES,
+                                    "Logit (raw)": [raw["emotion_logits"][c] for c in EMOTIC_CATEGORIES],
+                                    "Sigmoid (prob)": [person.category_scores[c] for c in EMOTIC_CATEGORIES],
+                                }
+                            )
+                            st.dataframe(logit_df, use_container_width=True, hide_index=True, height=280)
+
+                            c1, c2, c3 = st.columns(3)
+                            c1.markdown("**VAD (unclipped)**")
+                            c1.dataframe(
+                                pd.DataFrame({"Dim": list(raw["vad_raw"]), "Value": list(raw["vad_raw"].values())}),
+                                hide_index=True, use_container_width=True,
+                            )
+                            c2.markdown("**Age logits**")
+                            c2.dataframe(
+                                pd.DataFrame({"Class": list(raw["age_logits"]), "Logit": list(raw["age_logits"].values())}),
+                                hide_index=True, use_container_width=True,
+                            )
+                            c3.markdown("**Gender logits**")
+                            c3.dataframe(
+                                pd.DataFrame({"Class": list(raw["gender_logits"]), "Logit": list(raw["gender_logits"].values())}),
+                                hide_index=True, use_container_width=True,
+                            )
+
+                            with st.expander("Full raw JSON"):
+                                st.json(raw)

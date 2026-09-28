@@ -42,6 +42,7 @@ CLASSIFIER_CANDIDATES = [
 # re-exporting at a different resolution needs no code change.
 DETECTION_CONF = 0.25        # min person confidence to keep a box
 NMS_IOU = 0.45               # overlap threshold for non-max suppression
+TOP_K = 3                    # how many top emotion categories to report per person
 
 # ASSUMPTION: classifier was trained with ImageNet normalization.
 NORM_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -70,6 +71,8 @@ class Person:
     vad: dict = field(default_factory=dict)                # V/A/D -> 1-10
     age: str = ""
     gender: str = ""
+    top_categories: list = field(default_factory=list)    # [(name, score)] top-K, best first
+    raw_output: dict = field(default_factory=dict)         # untouched model outputs (for debugging)
 
 
 class InferenceError(Exception):
@@ -105,7 +108,7 @@ def _softmax(x):
     return e / e.sum()
 
 
-def _detect_people(session, image: np.ndarray) -> list[tuple[BoundingBox, float]]:
+def _detect_people(session, image: np.ndarray) -> list[tuple[BoundingBox, float, list]]:
     """Letterbox -> YOLO forward -> decode -> NMS -> boxes in original pixels."""
     size = _input_size(session)
     h, w = image.shape[:2]
@@ -142,7 +145,9 @@ def _detect_people(session, image: np.ndarray) -> list[tuple[BoundingBox, float]
         by2 = int(np.clip(y1[i] + bh_o[i], 0, h))
         if bx2 - bx1 < 4 or by2 - by1 < 4:
             continue
-        results.append((BoundingBox(bx1, by1, bx2, by2), float(scores[i])))
+        # raw = the detector's untouched (cx, cy, w, h, score) row, in 640x640 letterbox space
+        raw_row = [round(float(v), 4) for v in preds[i]]
+        results.append((BoundingBox(bx1, by1, bx2, by2), float(scores[i]), raw_row))
     return results
 
 
@@ -161,6 +166,13 @@ def _classify_person(session, image: np.ndarray, box: BoundingBox) -> dict:
         "vad": np.clip(continuous[0], 1, 10),
         "age": AGE_CLASSES[int(np.argmax(_softmax(age[0])))],
         "gender": GENDER_CLASSES[int(np.argmax(_softmax(gender[0])))],
+        # Raw, unprocessed network outputs (before sigmoid / softmax / clipping)
+        "raw": {
+            "emotion_logits": {c: round(float(v), 4) for c, v in zip(EMOTIC_CATEGORIES, emotions[0])},
+            "vad_raw": {d: round(float(v), 4) for d, v in zip(VAD_DIMENSIONS, continuous[0])},
+            "age_logits": {c: round(float(v), 4) for c, v in zip(AGE_CLASSES, age[0])},
+            "gender_logits": {c: round(float(v), 4) for c, v in zip(GENDER_CLASSES, gender[0])},
+        },
     }
 
 
@@ -181,10 +193,11 @@ def run_inference(image: np.ndarray) -> list[Person]:
         detections = _detect_people(detector, image)
 
         people = []
-        for box, conf in detections:
+        for box, conf, det_raw in detections:
             out = _classify_person(classifier, image, box)
             scores = {c: round(float(s), 4) for c, s in zip(EMOTIC_CATEGORIES, out["emotions"])}
-            top = max(scores, key=scores.get)
+            ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+            top = ranked[0][0]
             people.append(Person(
                 box=box,
                 detection_confidence=round(conf, 3),
@@ -193,6 +206,11 @@ def run_inference(image: np.ndarray) -> list[Person]:
                 vad={d: round(float(v), 1) for d, v in zip(VAD_DIMENSIONS, out["vad"])},
                 age=out["age"],
                 gender=out["gender"],
+                top_categories=ranked[:TOP_K],
+                raw_output={
+                    "detector_row_cx_cy_w_h_score": det_raw,
+                    **out["raw"],
+                },
             ))
         return people
     except InferenceError:
