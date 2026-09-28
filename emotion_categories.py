@@ -34,13 +34,13 @@ VAD_RANGE = (1, 10)
 # output once that's defined — the UI only depends on the dict shape.
 # --------------------------------------------------------------------------
 GENERALIZED_GROUPS = {
-    "Happiness":       ["Peace", "Affection", "Esteem", "Confidence", "Happiness", "Pleasure"],
-    "Excitement":      ["Anticipation", "Engagement", "Excitement", "Surprise"],
-    "Sympathy":        ["Sympathy", "Yearning"],
-    "Confusion":       ["Doubt/Confusion", "Disconnection", "Embarrassment"],
-    "Disapproval":     ["Disapproval", "Aversion", "Annoyance", "Anger"],
-    "Sadness":         ["Sadness", "Disquietment", "Sensitivity", "Fatigue"],
-    "Fear/Suffering":  ["Fear", "Pain", "Suffering"],
+    "Happiness":       ["Affection", "Excitement", "Confidence", "Anticipation", "Happiness", "Peace", "Pleasure", "Esteem", "Engagement", "Sympathy"],
+    "Sadness":        ["Sadness", "Yearning", "Suffering", "Fatigue", "Sensitivity"],
+    "Anger":        ["Anger", "Disapproval", "Doubt/Confusion", "Annoyance", "Pain"],
+    "Fear":        ["Fear", "Disquietment", "Embarrassment",],
+    "Disgust":        ["Aversion"],
+    "Surprise":        ["Surprise"],
+    "Neutral":        ["Disconnection"]
 }
 
 CATEGORY_TO_GROUP = {
