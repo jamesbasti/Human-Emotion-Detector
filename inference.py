@@ -29,13 +29,12 @@ import onnxruntime as ort
 
 from emotion_categories import EMOTIC_CATEGORIES, CATEGORY_TO_GROUP, VAD_DIMENSIONS
 
-# ------------------------------- CONFIG ------------------------------------
+# CONFIG{
+
 MODELS_DIR = Path(__file__).parent / "models"
 DETECTOR_PATH = MODELS_DIR / "detector.onnx"
-# First file that exists wins, so a re-trained model can just be dropped in.
 CLASSIFIER_CANDIDATES = [
-    MODELS_DIR / "emotic_attribute_model_1.onnx",
-    MODELS_DIR / "emotic_attribute_model.onnx",
+    MODELS_DIR / "emotic_attribute_model.onnx",  
 ]
 
 # Input sizes are read from the models themselves (see _input_size), so
@@ -51,7 +50,8 @@ NORM_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 # ASSUMPTION: EMOTIC attribute order. Only used for the optional fields.
 AGE_CLASSES = ["Kid", "Teenager", "Adult"]
 GENDER_CLASSES = ["Female", "Male"]
-# ---------------------------------------------------------------------------
+
+# }CONFIG
 
 
 @dataclass
@@ -85,7 +85,7 @@ def _load_sessions():
     if not DETECTOR_PATH.exists() or classifier_path is None:
         raise InferenceError(
             "Model file(s) not found. Put detector.onnx and "
-            "emotic_attribute_model_1.onnx in the 'models' folder."
+            "emotic_attribute_model.onnx in the 'models' folder."
         )
     providers = ["CPUExecutionProvider"]
     return (

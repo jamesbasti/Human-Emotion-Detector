@@ -1,13 +1,5 @@
 """
 Emotion Detector — Streamlit front end.
-
-Maps to the SRS as follows:
-  - 3.1 Image Upload and Detection  -> fully implemented (High priority)
-  - 3.2 Video Upload and Detection  -> mode selectable, marked "coming soon"
-  - 3.3 Live Webcam Feed Detection  -> mode selectable, marked "coming soon"
-  - 3.4 Emotion Category Breakdown  -> "Show Emotion category breakdown" toggle
-  - 3.5 Detection Results Display   -> the persistent "Detection frame" panel
-  - 4.1 User Interfaces             -> header + sidebar + main content layout
 """
 
 import numpy as np
@@ -15,15 +7,19 @@ import pandas as pd
 import streamlit as st
 from PIL import Image
 
+import tempfile
+from pathlib import Path
+
 from inference import run_inference, InferenceError
 from utils import validate_image_file, draw_detections, fit_for_display
+from video import validate_video_file, process_video
 from emotion_categories import EMOTIC_CATEGORIES, VAD_DIMENSIONS
 
 st.set_page_config(page_title="Emotion Detector", layout="wide")
 
 # Session state defaults
 if "show_breakdown" not in st.session_state:
-    st.session_state.show_breakdown = False  # REQ-23: persists for the session
+    st.session_state.show_breakdown = False  # persists for the session
 if "show_attributes" not in st.session_state:
     st.session_state.show_attributes = False
 if "show_raw" not in st.session_state:
@@ -32,9 +28,9 @@ if "show_raw" not in st.session_state:
 # Header
 st.title("Emotion Detector")
 
-# Sidebar — mode selector + upload area + detection settings
+# Sidebar — mode selector, upload area, detection settings
 with st.sidebar:
-    mode = st.radio("Input mode", ["Image", "Video", "Webcam"], horizontal=True)  # REQ-1/9/15
+    mode = st.radio("Input mode", ["Image", "Video", "Webcam"], horizontal=True)  
 
     st.divider()
 
@@ -42,18 +38,18 @@ with st.sidebar:
     if mode == "Image":
         uploaded_file = st.file_uploader(
             "Drag or upload photo here", type=["jpg", "jpeg", "png"]
-        )  # REQ-2
+        )  
     elif mode == "Video":
-        st.file_uploader("Upload a video (MP4)", type=["mp4"], disabled=True)
+        uploaded_video = st.file_uploader("Upload a video (MP4)", type=["mp4"])  
     else:  # Webcam
-        st.button("Start webcam", disabled=True)
+        webcam_photo = st.camera_input("Webcam")  # browser prompts for permission
 
     st.divider()
     st.subheader("Detection Settings")
     st.session_state.show_breakdown = st.toggle(
         "Show Emotion category breakdown",
         value=st.session_state.show_breakdown,
-    )  # REQ-20
+    )  
     st.session_state.show_attributes = st.toggle(
         "Show age and gender",
         value=st.session_state.show_attributes,
@@ -63,14 +59,68 @@ with st.sidebar:
         value=st.session_state.show_raw,
     )
 
-# Main content — the persistent Detection frame panel (3.5)
+# Main content — the persistent Detection frame panel
 st.subheader("Detection frame")
 
-if mode in ("Video", "Webcam"):
-    st.info(f"{mode} mode is coming soon. Switch to **Image** mode to try detection now.")
+if mode == "Video":
+    if uploaded_video is None:
+        st.markdown("*No input yet — upload a video from the sidebar to run detection.*")  
+    else:
+        is_valid, error_msg = validate_video_file(uploaded_video)
+        if not is_valid:
+            st.error(error_msg)  
+        else:
+            st.caption(uploaded_video.name)  
+
+            tmp_dir = Path(tempfile.gettempdir())
+            in_path = tmp_dir / f"in_{uploaded_video.name}"
+            out_path = tmp_dir / f"out_{uploaded_video.name}"
+            in_path.write_bytes(uploaded_video.getvalue())
+
+            if st.button("Process video"):
+                progress = st.progress(0.0, text="Processing video...")  
+                try:
+                    stats = process_video(
+                        str(in_path), str(out_path),
+                        progress_callback=lambda f: progress.progress(f, text=f"Processing video... {f:.0%}"),
+                    )
+                    progress.empty()
+                    st.session_state["video_result"] = str(out_path)
+                    if stats["max_people_seen"] == 0:
+                        st.warning("No persons were found in this video.")  # equivalent
+                except InferenceError as e:
+                    progress.empty()
+                    st.error(f"Detection failed: {e}")
+                    st.session_state.pop("video_result", None)
+
+            if st.session_state.get("video_result"):
+                st.video(st.session_state["video_result"])  # native play/pause/scrub
+
+elif mode == "Webcam":
+    if webcam_photo is None:
+        st.markdown("*No input yet — allow camera access and take a photo.*")  
+    else:
+        image_np = np.array(Image.open(webcam_photo).convert("RGB"))
+        with st.spinner("Running detection..."):
+            try:
+                people = run_inference(image_np)  
+            except InferenceError as e:
+                people = None
+                st.error(f"Detection failed: {e}")
+
+        if people is not None:
+            if len(people) == 0:
+                st.warning("No persons were found.")
+                st.image(fit_for_display(image_np))
+            else:
+                annotated = draw_detections(
+                    image_np, people, show_attributes=st.session_state.show_attributes
+                )
+                st.image(fit_for_display(annotated))
+        st.caption("Take another photo above to run detection again, or switch modes to stop the camera.")  
 
 elif uploaded_file is None:
-    # REQ-27: placeholder state before first submitted input
+    # placeholder state before first submitted input
     st.markdown(
         "*upload a photo to run detection.*"
     )
@@ -79,9 +129,9 @@ else:
     is_valid, error_msg = validate_image_file(uploaded_file)
 
     if not is_valid:
-        st.error(error_msg)  # REQ-3
+        st.error(error_msg)  
     else:
-        st.caption(uploaded_file.name)  # REQ-7/REQ-25: source identifier
+        st.caption(uploaded_file.name)  # source identifier
 
         pil_image = Image.open(uploaded_file).convert("RGB")
         image_np = np.array(pil_image)
@@ -95,14 +145,14 @@ else:
 
         if people is not None:
             if len(people) == 0:
-                # REQ-8: no person detected
+                # no person detected
                 st.warning("No persons were found in this image.")
                 st.image(fit_for_display(image_np))
             else:
                 annotated = draw_detections(
                     image_np, people, show_attributes=st.session_state.show_attributes
                 )
-                st.image(fit_for_display(annotated))  # REQ-5/REQ-6/REQ-26
+                st.image(fit_for_display(annotated))  
 
                 # Top-3 emotion categories per person (also drawn on the image)
                 st.markdown("### Top 3 emotions")
@@ -115,7 +165,7 @@ else:
                         st.markdown(f"**Person {i + 1}:** {person.age}, {person.gender}")
                     
                 if st.session_state.show_breakdown:
-                    # REQ-21: 26-category scores + VAD per person
+                    # 26-category scores + VAD per person
                     st.divider()
                     st.markdown("### Emotion category breakdown")
                     for i, person in enumerate(people):
@@ -139,7 +189,7 @@ else:
                                 .reset_index(drop=True)
                             )
                             st.dataframe(
-                                scores_df, use_container_width=True, hide_index=True, height=280
+                                scores_df, width="stretch", hide_index=True, height=280
                             )
 
                 if st.session_state.show_raw:
@@ -156,7 +206,7 @@ else:
                             st.markdown("**Detector (YOLO) row** — 640×640 letterbox space")
                             st.dataframe(
                                 pd.DataFrame([{"cx": cx, "cy": cy, "w": bw, "h": bh, "score": score}]),
-                                use_container_width=True, hide_index=True,
+                                width="stretch", hide_index=True,
                             )
 
                             st.markdown("**Classifier: 26 emotion logits** (canonical EMOTIC order)")
@@ -167,23 +217,23 @@ else:
                                     "Sigmoid (prob)": [person.category_scores[c] for c in EMOTIC_CATEGORIES],
                                 }
                             )
-                            st.dataframe(logit_df, use_container_width=True, hide_index=True, height=280)
+                            st.dataframe(logit_df, width="stretch", hide_index=True, height=280)
 
                             c1, c2, c3 = st.columns(3)
                             c1.markdown("**VAD (unclipped)**")
                             c1.dataframe(
                                 pd.DataFrame({"Dim": list(raw["vad_raw"]), "Value": list(raw["vad_raw"].values())}),
-                                hide_index=True, use_container_width=True,
+                                hide_index=True, width="stretch",
                             )
                             c2.markdown("**Age logits**")
                             c2.dataframe(
                                 pd.DataFrame({"Class": list(raw["age_logits"]), "Logit": list(raw["age_logits"].values())}),
-                                hide_index=True, use_container_width=True,
+                                hide_index=True, width="stretch",
                             )
                             c3.markdown("**Gender logits**")
                             c3.dataframe(
                                 pd.DataFrame({"Class": list(raw["gender_logits"]), "Logit": list(raw["gender_logits"].values())}),
-                                hide_index=True, use_container_width=True,
+                                hide_index=True, width="stretch",
                             )
 
                             with st.expander("Full raw JSON"):
