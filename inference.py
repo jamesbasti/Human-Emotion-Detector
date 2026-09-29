@@ -47,12 +47,14 @@ DETECTION_CONF = 0.25        # min person confidence to keep a box
 NMS_IOU = 0.45               # overlap threshold for non-max suppression
 TOP_K = 3                    # how many top emotion categories to report per person
 
-# ASSUMPTION: classifier was trained with ImageNet normalization.
+# Confirmed against the training notebook's transforms.Normalize (cell 16/17).
 NORM_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 NORM_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-# ASSUMPTION: EMOTIC attribute order. Only used for the optional fields.
-AGE_CLASSES = ["Kid", "Teenager", "Adult"]
+# EMOTIC attribute order, taken from the training notebook (AGE_TO_ID /
+# GENDER_TO_ID in cell 16, matches decode_attributes in cells 18/19) rather
+# than assumed. Only used for the optional age/gender display.
+AGE_CLASSES = ["Adult", "Kid", "Teenager"]
 GENDER_CLASSES = ["Female", "Male"]
 
 # }CONFIG

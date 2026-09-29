@@ -41,10 +41,11 @@ def validate_image_file(uploaded_file) -> tuple[bool, str]:
 
 def draw_detections(image: np.ndarray, people: list, show_attributes: bool = False) -> np.ndarray:
     """
-    Draw one bounding box + a label listing the top-K emotion categories (with
-    scores) per detected person, each in a distinct color, onto a copy of
-    `image`. If `show_attributes` is True, age group and gender are added to
-    the label header.
+    Draw one bounding box per detected person, each in a distinct color, onto
+    a copy of `image`. The label's first line is the generalized emotion
+    (e.g. "Person 1: Anger"), followed by the top-K individual categories
+    with their scores. If `show_attributes` is True, age group and gender
+    are appended to the first line.
     Line/font sizes scale with the image so labels stay readable on big photos.
     """
     annotated = image.copy()
@@ -59,8 +60,8 @@ def draw_detections(image: np.ndarray, people: list, show_attributes: bool = Fal
         box = person.box
         cv2.rectangle(annotated, (box.x1, box.y1), (box.x2, box.y2), color, box_thickness)
 
-        # Multi-line label: header + top-K categories with their scores.
-        header = f"Person {i + 1}"
+        # Multi-line label: header (with generalized emotion) + top-K categories.
+        header = f"Person {i + 1}: {person.generalized_emotion}"
         if show_attributes and (person.age or person.gender):
             header += f" | {person.age}, {person.gender}"
         lines = [header] + [f"{name} {score:.0%}" for name, score in person.top_categories]

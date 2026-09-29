@@ -62,18 +62,23 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Detection Settings")
-    st.session_state.show_breakdown = st.toggle(
-        "Show Emotion category breakdown",
-        value=st.session_state.show_breakdown,
-    )  
     st.session_state.show_attributes = st.toggle(
         "Show age and gender",
         value=st.session_state.show_attributes,
     )
-    st.session_state.show_raw = st.toggle(
-        "Show raw model output",
-        value=st.session_state.show_raw,
-    )
+    if mode == "Image":
+        # Breakdown and raw-output views are per-image detail panels (see the
+        # Image branch below); Video just writes an annotated clip, and
+        # Webcam only ever shows the live/snapshot frame, so there's nowhere
+        # for either of these to render outside Image mode.
+        st.session_state.show_breakdown = st.toggle(
+            "Show Emotion category breakdown",
+            value=st.session_state.show_breakdown,
+        )
+        st.session_state.show_raw = st.toggle(
+            "Show raw model output",
+            value=st.session_state.show_raw,
+        )
 
 # Main content — the persistent Detection frame panel
 st.subheader("Detection frame")
@@ -98,6 +103,7 @@ if mode == "Video":
                 try:
                     stats = process_video(
                         str(in_path), str(out_path),
+                        show_attributes=st.session_state.show_attributes,
                         progress_callback=lambda f: progress.progress(f, text=f"Processing video... {f:.0%}"),
                     )
                     progress.empty()

@@ -42,7 +42,7 @@ def validate_video_file(uploaded_file) -> tuple[bool, str]:
     return True, ""
 
 
-def process_video(input_path: str, output_path: str, progress_callback=None) -> dict:
+def process_video(input_path: str, output_path: str, show_attributes: bool = False, progress_callback=None) -> dict:
     """
     Run detection+classification across the video and write an annotated
     copy to `output_path`.
@@ -50,6 +50,7 @@ def process_video(input_path: str, output_path: str, progress_callback=None) -> 
     Args:
         input_path: path to the uploaded video on disk.
         output_path: where to write the annotated MP4.
+        show_attributes: whether to draw age/gender on each detected person.
         progress_callback: optional callable(fraction_done: float) -> None.
 
     Returns:
@@ -97,7 +98,9 @@ def process_video(input_path: str, output_path: str, progress_callback=None) -> 
                 last_people = run_inference(rgb)
                 max_people = max(max_people, len(last_people))
 
-            annotated_rgb = draw_detections(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB), last_people)
+            annotated_rgb = draw_detections(
+                cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB), last_people, show_attributes=show_attributes
+            )
             writer.append_data(annotated_rgb)
 
             i += 1
